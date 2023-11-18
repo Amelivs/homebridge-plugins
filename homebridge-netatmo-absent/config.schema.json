@@ -1,0 +1,65 @@
+{
+  "pluginAlias": "NetatmoAbsent",
+  "pluginType": "platform",
+  "singular": true,
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "title": "Name",
+        "type": "string",
+        "required": true,
+        "default": "Netatmo Absent"
+      },
+      "homeId": {
+        "title": "HomeId",
+        "type": "string",
+        "required": true
+      },
+      "rooms": {
+        "title": "Rooms",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "room_id": {
+              "title": "Room Id",
+              "type": "string",
+              "required": true
+            },
+            "room_name": {
+              "title": "Room Name",
+              "type": "string",
+              "required": true
+            },
+            "boost": {
+              "title": "boost",
+              "type": "number",
+              "required": true
+            }
+          }
+        }
+      },
+      "auth": {
+        "type": "object",
+        "properties": {
+          "client_id": {
+            "title": "client_id",
+            "type": "string",
+            "required": true
+          },
+          "client_secret": {
+            "title": "client_secret",
+            "type": "string",
+            "required": true
+          },
+          "refresh_token": {
+            "title": "refresh_token",
+            "type": "string",
+            "required": true
+          }
+        }
+      }
+    }
+  }
+}
