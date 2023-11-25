@@ -9,7 +9,7 @@ const authInfo = {
 };
 
 const netatmo = new Netatmo(authInfo, homeId);
-netatmo.isAwayMode('289466472')
+netatmo.isAway()
   .then(f => {
     const gf = 0;
   })

@@ -5,11 +5,6 @@ import { Netatmo } from './netatmo';
 import NodeCache from 'node-cache';
 import { DEVICE } from './settings';
 
-interface RoomConfig {
-  room_id: string;
-  room_name: string;
-  boost: number;
-}
 
 /**
  * Platform Accessory
@@ -18,8 +13,7 @@ interface RoomConfig {
  */
 export class NetatmoAbsentPlatformAccessory {
 
-  private netatmo: Netatmo;
-  private rooms: RoomConfig[];
+  private readonly netatmo: Netatmo;
 
   private readonly awayModeCache = new NodeCache({ stdTTL: 120, checkperiod: 0, useClones: false });
 
@@ -61,8 +55,6 @@ export class NetatmoAbsentPlatformAccessory {
      * can use the same sub type id.)
      */
 
-    this.rooms = this.platform.config['rooms'] as RoomConfig[];
-
     //Absence
     const absentService = this.accessory.getService('Absent') || this.accessory.addService(this.platform.Service.Switch, 'Absent', '7042c1bf-fdad-4b5d-9869-9b7aea10c8b5');
     absentService.setCharacteristic(this.platform.Characteristic.Name, 'Absent');
@@ -87,17 +79,10 @@ export class NetatmoAbsentPlatformAccessory {
    * These are sent when the user changes the state of an accessory, for example, turning on a Light bulb.
    */
   async setOn(service: Service, value: CharacteristicValue) {
-    let task: Promise<void>;
-    if (value) {
-      task = this.netatmo.setAwayMode();
-    } else {
-      task = this.netatmo.setScheduleMode();
-    }
-    await task
+    await this.netatmo.setAway(value === true)
       .then(() => {
         this.platform.log.info('Set Away mode `%s`', value);
-        const roomId = this.rooms[0].room_id;
-        this.awayModeCache.set(roomId, !!value);
+        this.awayModeCache.set('mode', !!value);
       })
       .catch(err => {
         this.platform.log.error(err.message);
@@ -119,18 +104,17 @@ export class NetatmoAbsentPlatformAccessory {
    * this.service.updateCharacteristic(this.platform.Characteristic.On, true)
    */
   getOn(service: Service): CharacteristicValue {
-    const roomId = this.rooms[0].room_id;
-    const isAway = this.awayModeCache.get<boolean>(roomId);
+    const isAway = this.awayModeCache.get<boolean>('mode');
     if (isAway != null) {
       this.platform.log.info('Get Away mode `%s` from cache', isAway);
       return isAway;
     }
 
-    this.netatmo.isAwayMode(roomId)
-      .then(isAwayMode => {
-        this.awayModeCache.set(roomId, isAwayMode);
-        this.platform.log.info('Get Away mode `%s` from API', isAwayMode);
-        service.updateCharacteristic(this.platform.Characteristic.On, isAwayMode);
+    this.netatmo.isAway()
+      .then(isAway => {
+        this.awayModeCache.set('mode', isAway);
+        this.platform.log.info('Get Away mode `%s` from API', isAway);
+        service.updateCharacteristic(this.platform.Characteristic.On, isAway);
       })
       .catch(err => {
         this.platform.log.error(err.message);

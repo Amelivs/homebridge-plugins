@@ -16,30 +16,6 @@
         "type": "string",
         "required": true
       },
-      "rooms": {
-        "title": "Rooms",
-        "type": "array",
-        "items": {
-          "type": "object",
-          "properties": {
-            "room_id": {
-              "title": "Room Id",
-              "type": "string",
-              "required": true
-            },
-            "room_name": {
-              "title": "Room Name",
-              "type": "string",
-              "required": true
-            },
-            "boost": {
-              "title": "boost",
-              "type": "number",
-              "required": true
-            }
-          }
-        }
-      },
       "auth": {
         "type": "object",
         "properties": {

@@ -1,24 +1,32 @@
 import { Logger } from 'homebridge';
-import NodeCache from 'node-cache';
-import fetch from 'node-fetch';
+import fetch, { RequestInfo, RequestInit } from 'node-fetch';
 import { URLSearchParams } from 'url';
 
-export interface AuthInfo {
-  readonly clientId: string;
-  readonly clientSecret: string;
-  readonly refreshToken: string;
-}
 
 export class Netatmo {
 
-  private readonly cache = new NodeCache({ stdTTL: 3600 * 3, checkperiod: 3600 * 3 * 0.2, useClones: false });
+  private authToken: string | undefined;
 
-  private async authenticate() {
-    const token = this.cache.get<string>('token');
-    if (token) {
-      return token;
+  private async authenticatedFetch(url: RequestInfo, init?: RequestInit | undefined, retryCount = 0) {
+    if (this.authToken == null) {
+      this.log?.info('Requesting an authentication token...');
+      this.authToken = await this.refreshToken();
+      this.log?.info('Authentication token successfully requested.');
     }
 
+    const authorization = { Authorization: `Bearer ${this.authToken}` };
+    const response = await fetch(url, { ...init, headers: { ...init?.headers, ...authorization } });
+
+    if (response.status === 401 && retryCount === 0) {
+      this.log?.info('Authentication token expired.');
+      this.authToken = undefined;
+      return this.authenticatedFetch(url, init, retryCount + 1);
+    }
+
+    return response;
+  }
+
+  private async refreshToken() {
     const body = new URLSearchParams({
       grant_type: 'refresh_token',
       refresh_token: this.authInfo.refreshToken,
@@ -40,121 +48,61 @@ export class Netatmo {
       throw new Error(text);
     }
 
-    const data = await res.json();
-    const newToken = data.access_token as string;
-    this.log?.info('Authentication Ok: ', newToken);
-
-    this.cache.set('token', newToken);
+    const result: AuthenticationResult = await res.json();
+    const newToken = result.access_token;
 
     return newToken;
   }
 
-  private async getTemperature(roomId: string, token: string) {
-    const roomMeasureParams = new URLSearchParams({
-      'home_id': this.homeId,
-      'room_id': roomId,
-      'scale': '30min',
-      'type': 'temperature',
-      'date_end': 'last',
-      'optimize': 'false',
-      'real_time': 'false',
-      'lower_access_level': '0',
-    });
-    const res = await fetch(`https://api.netatmo.com/api/getroommeasure?${roomMeasureParams.toString()}`,
-      {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(text);
-    }
-    const data = await res.json();
-    return data.body[Object.keys(data.body)[0]][0] as number;
-  }
+  constructor(
+    private readonly authInfo: AuthInfo,
+    private readonly homeId: string,
+    private readonly log?: Logger) { }
 
-  private async setTemperature(roomId: string, temperature: number, token: string) {
-    const setTempParams = new URLSearchParams({
-      'home_id': this.homeId,
-      'room_id': roomId,
-      'mode': 'manual',
-      'temp': temperature.toString(),
-      'endtime': (Math.floor(Date.now() / 1000) + 60 * 30).toString(),
-    });
-    const res = await fetch(`https://api.netatmo.com/api/setroomthermpoint?${setTempParams.toString()}`,
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(text);
-    }
-    return await res.json();
-  }
-
-  private async getMode(roomId: string, token: string) {
+  public async isAway() {
     const params = new URLSearchParams({
       'home_id': this.homeId,
     });
-    const res = await fetch(`https://api.netatmo.com/api/homestatus?${params.toString()}`,
-      {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+    const res = await this.authenticatedFetch(`https://api.netatmo.com/api/homestatus?${params.toString()}`, { method: 'GET' });
     if (!res.ok) {
       const text = await res.text();
       throw new Error(text);
     }
-    const result = await res.json();
-
-    const rooms = result.body?.home?.rooms as any[];
-    const room = rooms?.find(r => r.id === roomId);
-    return room?.therm_setpoint_mode as string;
+    const result: HomeStatusResult = await res.json();
+    const rooms = result.body?.home?.rooms ?? [];
+    return rooms.some(r => r.therm_setpoint_mode.includes('away'));
   }
 
-  private async setMode(mode: string, token: string) {
+  public async setAway(away: boolean) {
     const params = new URLSearchParams({
       'home_id': this.homeId,
-      'mode': mode,
+      'mode': away ? 'away' : 'schedule',
     });
-    const res = await fetch(`https://api.netatmo.com/api/setthermmode?${params.toString()}`,
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+    const res = await this.authenticatedFetch(`https://api.netatmo.com/api/setthermmode?${params.toString()}`, { method: 'POST' });
     if (!res.ok) {
       const text = await res.text();
       throw new Error(text);
     }
-  }
-
-  constructor(private authInfo: AuthInfo, private readonly homeId = '5bff18550f21e196648b4826', private log?: Logger) { }
-
-  async boostTemperature(roomId = '3627429255', boost = 0.5) {
-    const token = await this.authenticate();
-    const currentTemp = await this.getTemperature(roomId, token);
-    this.log?.info('Current Temp: ', currentTemp);
-
-    const newTemp = (Math.round(currentTemp * 2) / 2) + boost;
-
-    await this.setTemperature(roomId, newTemp, token);
-    this.log?.info('New Temp set: ', newTemp);
-  }
-
-  async setAwayMode() {
-    const token = await this.authenticate();
-    await this.setMode('away', token);
-  }
-
-  async setScheduleMode() {
-    const token = await this.authenticate();
-    await this.setMode('schedule', token);
-  }
-
-  async isAwayMode(roomId: string) {
-    const token = await this.authenticate();
-    const mode = await this.getMode(roomId, token);
-    return mode === 'away';
   }
 }
+
+export interface AuthInfo {
+  readonly clientId: string;
+  readonly clientSecret: string;
+  readonly refreshToken: string;
+}
+
+type AuthenticationResult = {
+  access_token: string;
+};
+
+type HomeStatusResult = {
+  body: {
+    home: {
+      rooms: Array<{
+        id: number;
+        therm_setpoint_mode: string;
+      }>;
+    };
+  };
+};
