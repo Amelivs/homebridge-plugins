@@ -2,7 +2,7 @@
   "private": true,
   "displayName": "Netatmo Absent",
   "name": "homebridge-netatmo-absent",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "Allows setting the Netatmo thermostat to Away mode from the Home app.",
   "engines": {
     "node": ">=10.17.0",

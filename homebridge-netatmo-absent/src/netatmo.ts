@@ -1,5 +1,5 @@
 import { Logger } from 'homebridge';
-import fetch, { RequestInfo, RequestInit } from 'node-fetch';
+import fetch, { RequestInfo, RequestInit, Response } from 'node-fetch';
 import { URLSearchParams } from 'url';
 
 
@@ -7,7 +7,7 @@ export class Netatmo {
 
   private authToken: string | undefined;
 
-  private async authenticatedFetch(url: RequestInfo, init?: RequestInit | undefined, retryCount = 0) {
+  private async authenticatedFetch(url: RequestInfo, init?: RequestInit | undefined, retryCount = 0): Promise<Response> {
     if (this.authToken == null) {
       this.log?.info('Requesting an authentication token...');
       this.authToken = await this.refreshToken();
@@ -17,8 +17,11 @@ export class Netatmo {
     const authorization = { Authorization: `Bearer ${this.authToken}` };
     const response = await fetch(url, { ...init, headers: { ...init?.headers, ...authorization } });
 
+    if (!response.ok) {
+      this.log?.error(`HTTP ${init?.method ?? 'GET'} ${url} responded ${response.status}`);
+    }
+
     if (response.status === 401 && retryCount === 0) {
-      this.log?.info('Authentication token expired.');
       this.authToken = undefined;
       return this.authenticatedFetch(url, init, retryCount + 1);
     }
