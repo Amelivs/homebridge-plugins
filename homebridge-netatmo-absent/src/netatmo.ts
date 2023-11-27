@@ -21,7 +21,7 @@ export class Netatmo {
       this.log?.error(`HTTP ${init?.method ?? 'GET'} ${url} responded ${response.status}`);
     }
 
-    if (response.status === 401 && retryCount === 0) {
+    if (response.status === 403 && retryCount === 0) {
       this.authToken = undefined;
       return this.authenticatedFetch(url, init, retryCount + 1);
     }

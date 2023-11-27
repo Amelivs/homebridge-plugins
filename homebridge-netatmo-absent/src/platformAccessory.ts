@@ -79,15 +79,14 @@ export class NetatmoAbsentPlatformAccessory {
    * These are sent when the user changes the state of an accessory, for example, turning on a Light bulb.
    */
   async setOn(service: Service, value: CharacteristicValue) {
-    await this.netatmo.setAway(value === true)
-      .then(() => {
-        this.platform.log.info('Set Away mode `%s`', value);
-        this.awayModeCache.set('mode', !!value);
-      })
-      .catch(err => {
-        this.platform.log.error(err.message);
-        throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
-      });
+    try {
+      await this.netatmo.setAway(value === true);
+      this.platform.log.info('Set Away mode `%s`', value);
+      this.awayModeCache.set('mode', !!value);
+    } catch (err) {
+      this.platform.log.error(err instanceof Error ? err.message : 'An unexpected error occured');
+      throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
+    }
   }
 
   /**
@@ -103,27 +102,24 @@ export class NetatmoAbsentPlatformAccessory {
    * @example
    * this.service.updateCharacteristic(this.platform.Characteristic.On, true)
    */
-  getOn(service: Service): CharacteristicValue {
-    const isAway = this.awayModeCache.get<boolean>('mode');
-    if (isAway != null) {
-      this.platform.log.info('Get Away mode `%s` from cache', isAway);
-      return isAway;
+  async getOn(service: Service): Promise<CharacteristicValue> {
+    const isAwayCache = this.awayModeCache.get<boolean>('mode');
+    if (isAwayCache != null) {
+      this.platform.log.info('Get Away mode `%s` from cache', isAwayCache);
+      return isAwayCache;
     }
 
-    this.netatmo.isAway()
-      .then(isAway => {
-        this.awayModeCache.set('mode', isAway);
-        this.platform.log.info('Get Away mode `%s` from API', isAway);
-        service.updateCharacteristic(this.platform.Characteristic.On, isAway);
-      })
-      .catch(err => {
-        this.platform.log.error(err.message);
-        throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
-      });
+    try {
+      const isAway = await this.netatmo.isAway();
+      this.awayModeCache.set('mode', isAway);
+      this.platform.log.info('Get Away mode `%s` from API', isAway);
+      return isAway;
+    } catch (err) {
+      this.platform.log.error(err instanceof Error ? err.message : 'An unexpected error occured');
+      throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
+    }
 
     // if you need to return an error to show the device as "Not Responding" in the Home app:
     // throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
-
-    return false;
   }
 }
