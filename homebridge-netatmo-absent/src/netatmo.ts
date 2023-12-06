@@ -32,7 +32,7 @@ export class Netatmo {
   private async refreshToken() {
     const body = new URLSearchParams({
       grant_type: 'refresh_token',
-      refresh_token: this.authInfo.refreshToken,
+      refresh_token: this.currentRefreshToken ?? '',
       client_id: this.authInfo.clientId,
       client_secret: this.authInfo.clientSecret,
     });
@@ -54,13 +54,18 @@ export class Netatmo {
     const result: AuthenticationResult = await res.json();
     const newToken = result.access_token;
 
+    this.tokenRefreshed(result.refresh_token);
+
     return newToken;
   }
 
   constructor(
     private readonly authInfo: AuthInfo,
     private readonly homeId: string,
+    private readonly tokenRefreshed: (refreshToken: string) => void,
     private readonly log?: Logger) { }
+
+  public currentRefreshToken: string | undefined;
 
   public async isAway() {
     const params = new URLSearchParams({
@@ -92,11 +97,11 @@ export class Netatmo {
 export interface AuthInfo {
   readonly clientId: string;
   readonly clientSecret: string;
-  readonly refreshToken: string;
 }
 
 type AuthenticationResult = {
   access_token: string;
+  refresh_token: string;
 };
 
 type HomeStatusResult = {

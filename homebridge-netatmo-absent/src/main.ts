@@ -5,10 +5,14 @@ const homeId = '';
 const authInfo = {
   clientId: '',
   clientSecret: '',
-  refreshToken: '',
 };
 
-const netatmo = new Netatmo(authInfo, homeId);
+const netatmo = new Netatmo(authInfo, homeId, (token) => {
+  console.log('new token', token);
+});
+
+netatmo.currentRefreshToken = '';
+
 netatmo.isAway()
   .then(f => {
     const gf = 0;

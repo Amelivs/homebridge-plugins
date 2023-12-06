@@ -68,10 +68,17 @@ export class NetatmoAbsentPlatformAccessory {
     const authInfo = {
       clientId: auth.client_id,
       clientSecret: auth.client_secret,
-      refreshToken: auth.refresh_token,
     };
 
-    this.netatmo = new Netatmo(authInfo, homeId, this.platform.log);
+    const onTokenRefreshed = (refreshToken: string) => {
+      this.platform.log.info('Persisting new refresh token');
+      absentService.setCharacteristic(this.platform.Characteristic.SerialNumber, refreshToken);
+    };
+
+    this.netatmo = new Netatmo(authInfo, homeId, onTokenRefreshed, this.platform.log);
+
+    const savedRefreshToken = absentService.getCharacteristic(this.platform.Characteristic.SerialNumber).value?.toString();
+    this.netatmo.currentRefreshToken = savedRefreshToken ?? auth.refresh_token;
   }
 
   /**
