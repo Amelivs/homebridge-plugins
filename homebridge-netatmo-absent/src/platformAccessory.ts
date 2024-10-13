@@ -1,4 +1,5 @@
 import { Service, PlatformAccessory, CharacteristicValue } from 'homebridge';
+import { LocalStorage } from 'node-localstorage';
 
 import { NetatmoAbsentHomebridgePlatform } from './platform';
 import { Netatmo } from './netatmo';
@@ -13,6 +14,7 @@ import { DEVICE } from './settings';
  */
 export class NetatmoAbsentPlatformAccessory {
 
+  private readonly localStorage = new LocalStorage('./storage');
   private readonly netatmo: Netatmo;
 
   private readonly awayModeCache = new NodeCache({ stdTTL: 120, checkperiod: 0, useClones: false });
@@ -56,7 +58,7 @@ export class NetatmoAbsentPlatformAccessory {
      */
 
     //Absence
-    const absentService = this.accessory.getService('Absent') || this.accessory.addService(this.platform.Service.Switch, 'Absent', '7042c1bf-fdad-4b5d-9869-9b7aea10c8b5');
+    const absentService = this.accessory.getService('Absent') ?? this.accessory.addService(this.platform.Service.Switch, 'Absent', '7042c1bf-fdad-4b5d-9869-9b7aea10c8b5');
     absentService.setCharacteristic(this.platform.Characteristic.Name, 'Absent');
     absentService.getCharacteristic(this.platform.Characteristic.On)
       .onSet(value => this.setOn(absentService, value))
@@ -64,21 +66,16 @@ export class NetatmoAbsentPlatformAccessory {
 
     const auth = this.platform.config['auth'];
     const homeId = this.platform.config['homeId'];
-
-    const authInfo = {
-      clientId: auth.client_id,
-      clientSecret: auth.client_secret,
-    };
+    const clientId = auth.client_id;
+    const clientSecret = auth.client_secret;
+    const refreshToken = this.localStorage.getItem('refreshToken') ?? auth.refresh_token;
 
     const onTokenRefreshed = (refreshToken: string) => {
       this.platform.log.info('Persisting new refresh token');
-      absentService.setCharacteristic(this.platform.Characteristic.SerialNumber, refreshToken);
+      this.localStorage.setItem('refreshToken', refreshToken);
     };
 
-    this.netatmo = new Netatmo(authInfo, homeId, onTokenRefreshed, this.platform.log);
-
-    const savedRefreshToken = absentService.getCharacteristic(this.platform.Characteristic.SerialNumber).value?.toString();
-    this.netatmo.currentRefreshToken = savedRefreshToken ?? auth.refresh_token;
+    this.netatmo = new Netatmo(clientId, clientSecret, refreshToken, homeId, onTokenRefreshed, this.platform.log);
   }
 
   /**

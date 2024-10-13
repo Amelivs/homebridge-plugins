@@ -5,16 +5,19 @@ import { URLSearchParams } from 'url';
 
 export class Netatmo {
 
-  private authToken: string | undefined;
+  private accessToken: string | undefined;
 
   private async authenticatedFetch(url: RequestInfo, init?: RequestInit | undefined, retryCount = 0): Promise<Response> {
-    if (this.authToken == null) {
-      this.log?.info('Requesting an authentication token...');
-      this.authToken = await this.refreshToken();
-      this.log?.info('Authentication token successfully requested.');
+    if (this.accessToken == null) {
+      this.log?.info('Authenticating with refresh token:', this.refreshToken);
+      const { access_token, refresh_token } = await this.authenticate();
+      this.accessToken = access_token;
+      this.refreshToken = refresh_token;
+      this.tokenRefreshed(refresh_token);
+      this.log?.info('Authentication successfull.');
     }
 
-    const authorization = { Authorization: `Bearer ${this.authToken}` };
+    const authorization = { Authorization: `Bearer ${this.accessToken}` };
     const response = await fetch(url, { ...init, headers: { ...init?.headers, ...authorization } });
 
     if (!response.ok) {
@@ -22,19 +25,19 @@ export class Netatmo {
     }
 
     if (response.status === 403 && retryCount === 0) {
-      this.authToken = undefined;
+      this.accessToken = undefined;
       return this.authenticatedFetch(url, init, retryCount + 1);
     }
 
     return response;
   }
 
-  private async refreshToken() {
+  private async authenticate() {
     const body = new URLSearchParams({
       grant_type: 'refresh_token',
-      refresh_token: this.currentRefreshToken ?? '',
-      client_id: this.authInfo.clientId,
-      client_secret: this.authInfo.clientSecret,
+      client_id: this.clientId,
+      client_secret: this.clientSecret,
+      refresh_token: this.refreshToken ?? '',
     });
 
     const res = await fetch('https://api.netatmo.com/oauth2/token', {
@@ -51,21 +54,16 @@ export class Netatmo {
       throw new Error(text);
     }
 
-    const result: AuthenticationResult = await res.json();
-    const newToken = result.access_token;
-
-    this.tokenRefreshed(result.refresh_token);
-
-    return newToken;
+    return await res.json() as AuthenticationResult;
   }
 
   constructor(
-    private readonly authInfo: AuthInfo,
+    private readonly clientId: string,
+    private readonly clientSecret: string,
+    private refreshToken: string,
     private readonly homeId: string,
     private readonly tokenRefreshed: (refreshToken: string) => void,
     private readonly log?: Logger) { }
-
-  public currentRefreshToken: string | undefined;
 
   public async isAway() {
     const params = new URLSearchParams({
@@ -92,11 +90,6 @@ export class Netatmo {
       throw new Error(text);
     }
   }
-}
-
-export interface AuthInfo {
-  readonly clientId: string;
-  readonly clientSecret: string;
 }
 
 type AuthenticationResult = {
